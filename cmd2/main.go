@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/rthornton128/goncurses"
+	"github.com/nsf/termbox-go"
 )
 
 type point struct {
@@ -12,111 +12,148 @@ type point struct {
 }
 
 type snake struct {
-	head point
-	tail []point
+	body []point
+	dir  point
 }
 
-type board struct {
-	width, height int
-	snake         snake
-	food          point
-	window        *goncurses.Window
+func (s *snake) move() {
+	head := s.body[0]
+	newHead := point{head.x + s.dir.x, head.y + s.dir.y}
+	s.body = append([]point{newHead}, s.body[:len(s.body)-1]...)
+}
+
+func (s *snake) grow() {
+	head := s.body[0]
+	newHead := point{head.x + s.dir.x, head.y + s.dir.y}
+	s.body = append([]point{newHead}, s.body...)
+}
+
+func (s *snake) collidesWith(p point) bool {
+	for _, b := range s.body {
+		if b == p {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *snake) collidesWithSelf() bool {
+	head := s.body[0]
+	for _, b := range s.body[1:] {
+		if b == head {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *snake) collidesWithWall(w, h int) bool {
+	head := s.body[0]
+	if head.x < 0 || head.x >= w || head.y < 0 || head.y >= h {
+		return true
+	}
+	return false
+}
+
+func (s *snake) draw() {
+	for _, b := range s.body {
+		termbox.SetCell(b.x, b.y, '█', termbox.ColorGreen, termbox.ColorDefault)
+	}
+}
+
+func (s *snake) handleInput(ev termbox.Event) {
+	switch ev.Key {
+	case termbox.KeyArrowUp:
+		if s.dir.y != 1 {
+			s.dir = point{0, -1}
+		}
+	case termbox.KeyArrowDown:
+		if s.dir.y != -1 {
+			s.dir = point{0, 1}
+		}
+	case termbox.KeyArrowLeft:
+		if s.dir.x != 1 {
+			s.dir = point{-1, 0}
+		}
+	case termbox.KeyArrowRight:
+		if s.dir.x != -1 {
+			s.dir = point{1, 0}
+		}
+	}
+}
+
+func spawnFood(w, h int, s *snake) point {
+	var p point
+	for {
+		p = point{rand.Intn(w), rand.Intn(h)}
+		if !s.collidesWith(p) {
+			break
+		}
+	}
+	return p
 }
 
 func main() {
+	err := termbox.Init()
+	if err != nil {
+		panic(err)
+	}
+	defer termbox.Close()
+
 	rand.Seed(time.Now().UnixNano())
 
-	stdscr, _ := goncurses.Init()
-	defer goncurses.End()
+	w, h := termbox.Size()
 
-	height, width := stdscr.MaxYX()
-
-	brd := board{
-		width:  width,
-		height: height,
-		window: stdscr,
-		snake: snake{
-			head: point{width / 2, height / 2},
-			tail: make([]point, 0),
-		},
+	snake := snake{
+		body: []point{{w / 2, h / 2}},
+		dir:  point{1, 0},
 	}
 
-	brd.spawnFood()
-	brd.drawBoard()
+	food := spawnFood(w, h, &snake)
 
-	direction := "right"
+	termbox.SetInputMode(termbox.InputEsc)
 
+mainLoop:
 	for {
-		key := stdscr.GetChar()
-		if key == 'q' {
-			break
+		termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
+
+		snake.draw()
+
+		termbox.SetCell(food.x, food.y, '█', termbox.ColorRed, termbox.ColorDefault)
+
+		switch ev := termbox.PollEvent(); ev.Type {
+		case termbox.EventKey:
+			snake.handleInput(ev)
+		case termbox.EventError:
+			panic(ev.Err)
 		}
 
-		switch key {
-		case 'w':
-			direction = "up"
-		case 'a':
-			direction = "left"
-		case 's':
-			direction = "down"
-		case 'd':
-			direction = "right"
+		if snake.collidesWith(food) {
+			snake.grow()
+			food = spawnFood(w, h, &snake)
+		} else {
+			snake.move()
 		}
 
-		if !brd.updateSnake(direction) {
-			break
+		if snake.collidesWithSelf() || snake.collidesWithWall(w, h) {
+			break mainLoop
 		}
-		brd.drawBoard()
-	}
-}
 
-func (b *board) spawnFood() {
-	b.food = point{rand.Intn(b.width), rand.Intn(b.height)}
-}
+		termbox.Flush()
 
-func (b *board) drawBoard() {
-	b.window.Clear()
-
-	b.window.Box(0, 0)
-	b.window.MovePrint(b.snake.head.y, b.snake.head.x, "O")
-
-	for _, pt := range b.snake.tail {
-		b.window.MovePrint(pt.y, pt.x, "o")
+		time.Sleep(time.Second / 10)
 	}
 
-	b.window.MovePrint(b.food.y, b.food.x, "*")
+	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
+	termbox.SetCell(w/2-4, h/2, 'G', termbox.ColorGreen, termbox.ColorDefault)
+	termbox.SetCell(w/2-3, h/2, 'A', termbox.ColorGreen, termbox.ColorDefault)
+	termbox.SetCell(w/2-2, h/2, 'M', termbox.ColorGreen, termbox.ColorDefault)
+	termbox.SetCell(w/2-1, h/2, 'E', termbox.ColorGreen, termbox.ColorDefault)
+	termbox.SetCell(w/2, h/2, ' ', termbox.ColorGreen, termbox.ColorDefault)
+	termbox.SetCell(w/2+1, h/2, 'O', termbox.ColorGreen, termbox.ColorDefault)
+	termbox.SetCell(w/2+2, h/2, 'V', termbox.ColorGreen, termbox.ColorDefault)
+	termbox.SetCell(w/2+3, h/2, 'E', termbox.ColorGreen, termbox.ColorDefault)
+	termbox.Flush()
 
-	b.window.Refresh()
-}
-
-func (b *board) updateSnake(direction string) bool {
-	var newHead point
-
-	switch direction {
-	case "up":
-		newHead = point{b.snake.head.x, b.snake.head.y - 1}
-	case "down":
-		newHead = point{b.snake.head.x, b.snake.head.y + 1}
-	case "left":
-		newHead = point{b.snake.head.x - 1, b.snake.head.y}
-	case "right":
-		newHead = point{b.snake.head.x + 1, b.snake.head.y}
-	}
-
-	if newHead.x < 1 || newHead.x >= b.width-1 || newHead.y < 1 || newHead.y >= b.height-1 {
-		return false
-	}
-
-	if newHead == b.food {
-		b.spawnFood()
-	} else {
-		b.snake.tail = append([]point{b.snake.head}, b.snake.tail...)
-		if len(b.snake.tail) > 0 {
-			b.window.MovePrint(b.snake.tail[len(b.snake.tail)-1].y, b.snake.tail[len(b.snake.tail)-1].x, " ")
-			b.snake.tail = b.snake.tail[:len(b.snake.tail)-1]
-		}
-	}
-
-	b.snake.head = newHead
-	return true
+	time.Sleep(time.Second * 2)
 }
