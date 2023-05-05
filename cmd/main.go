@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	width  = 20
-	height = 10
+	width  = 40
+	height = 20
 )
 
 type point struct {
@@ -98,7 +98,7 @@ func main() {
 	direction := point{1, 0}
 	for g.running {
 		g.draw()
-		time.Sleep(time.Second / 10)
+		time.Sleep(time.Second / 1000)
 		g.update(direction)
 		switch direction {
 		case point{1, 0}:
