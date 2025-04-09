@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lpxxn/snake/game"
@@ -56,7 +56,13 @@ func main() {
 			g.Move()
 
 			// 绘制游戏状态
-			fmt.Print(g.String())
+			gameState := g.String()
+			lines := strings.Split(gameState, "\n")
+			for y, line := range lines {
+				for x, ch := range line {
+					termbox.SetCell(x, y, ch, termbox.ColorDefault, termbox.ColorDefault)
+				}
+			}
 
 			// 刷新屏幕
 			termbox.Flush()
