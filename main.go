@@ -2,139 +2,70 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"os"
-	"os/exec"
 	"time"
+
+	"github.com/lpxxn/snake/game"
+	"github.com/nsf/termbox-go"
 )
-
-const (
-	width  = 40
-	height = 20
-)
-
-type point struct {
-	x, y int
-}
-
-type snake struct {
-	body      []point
-	direction point
-}
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	// 初始化终端
+	err := termbox.Init()
+	if err != nil {
+		panic(err)
+	}
+	defer termbox.Close()
 
-	s := newSnake()
+	// 创建游戏实例
+	g := game.NewGame(40, 20)
 
-	var food point
-	s.generateFood(&food)
+	// 创建事件通道
+	eventQueue := make(chan termbox.Event)
+	go func() {
+		for {
+			eventQueue <- termbox.PollEvent()
+		}
+	}()
 
-	score := 0
+	// 游戏主循环
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
 
 	for {
-		clearScreen()
-		printBoard(s, food, score)
-		time.Sleep(time.Second / 10)
+		select {
+		case ev := <-eventQueue:
+			if ev.Type == termbox.EventKey {
+				switch ev.Key {
+				case termbox.KeyArrowUp:
+					g.ChangeDirection(game.Up)
+				case termbox.KeyArrowDown:
+					g.ChangeDirection(game.Down)
+				case termbox.KeyArrowLeft:
+					g.ChangeDirection(game.Left)
+				case termbox.KeyArrowRight:
+					g.ChangeDirection(game.Right)
+				case termbox.KeyEsc:
+					return
+				}
+			}
+		case <-ticker.C:
+			// 清屏
+			termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
 
-		if !s.move() {
-			break
+			// 移动蛇
+			g.Move()
+
+			// 绘制游戏状态
+			fmt.Print(g.String())
+
+			// 刷新屏幕
+			termbox.Flush()
+
+			// 检查游戏是否结束
+			if g.GameOver {
+				time.Sleep(2 * time.Second)
+				return
+			}
 		}
-
-		if s.head() == food {
-			score++
-			s.grow()
-			s.generateFood(&food)
-		}
-	}
-
-	fmt.Println("Game over!")
-}
-
-func newSnake() *snake {
-	s := &snake{
-		body: []point{
-			{width / 2, height / 2},
-			{width/2 - 1, height / 2},
-		},
-		direction: point{1, 0},
-	}
-	return s
-}
-
-func (s *snake) head() point {
-	return s.body[0]
-}
-
-func (s *snake) grow() {
-	tail := s.body[len(s.body)-1]
-	s.body = append(s.body, tail)
-}
-
-func (s *snake) move() bool {
-	head := s.head()
-
-	// calculate new head position
-	newHead := point{head.x + s.direction.x, head.y + s.direction.y}
-
-	// check for collision with walls or own body
-	if newHead.x < 0 || newHead.x >= width || newHead.y < 0 || newHead.y >= height {
-		return false
-	}
-
-	for _, p := range s.body {
-		if newHead == p {
-			return false
-		}
-	}
-
-	// move the snake
-	s.body = append([]point{newHead}, s.body[:len(s.body)-1]...)
-
-	return true
-}
-
-func (s *snake) generateFood(f *point) {
-	for {
-		*f = point{rand.Intn(width), rand.Intn(height)}
-		if !s.contains(*f) {
-			break
-		}
-	}
-}
-
-func (s *snake) contains(p point) bool {
-	for _, v := range s.body {
-		if v == p {
-			return true
-		}
-	}
-	return false
-}
-
-func clearScreen() {
-	cmd := exec.Command("clear")
-	cmd.Stdout = os.Stdout
-	cmd.Run()
-}
-
-func printBoard(s *snake, food point, score int) {
-	board := make([][]byte, height)
-	for i := range board {
-		board[i] = make([]byte, width)
-	}
-
-	// draw the snake
-	for _, p := range s.body {
-		board[p.y][p.x] = '*'
-	}
-
-	// draw the food
-	board[food.y][food.x] = '@'
-
-	// print the board
-	fmt.Println("Score:", score)
-	for _, line := range board {
-		fmt.Println(string(line))
 	}
 }
