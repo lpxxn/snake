@@ -1,77 +1,44 @@
 package main
 
 import (
-	"strings"
-	"time"
+	"flag"
+	"log"
+	"net/http"
 
+	"github.com/gorilla/websocket"
 	"github.com/lpxxn/snake/game"
-	"github.com/nsf/termbox-go"
+)
+
+var (
+	addr     = flag.String("addr", ":8981", "http service address")
+	upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // 允许所有来源的WebSocket连接
+		},
+	}
 )
 
 func main() {
-	// 初始化终端
-	err := termbox.Init()
-	if err != nil {
-		panic(err)
-	}
-	defer termbox.Close()
+	flag.Parse()
 
-	// 创建游戏实例
-	g := game.NewGame(40, 20)
+	// 创建游戏服务器
+	gameServer := game.NewGameServer(30, 20)
 
-	// 创建事件通道
-	eventQueue := make(chan termbox.Event)
-	go func() {
-		for {
-			eventQueue <- termbox.PollEvent()
+	// 处理WebSocket连接
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Printf("升级WebSocket连接失败: %v\n", err)
+			return
 		}
-	}()
+		gameServer.HandleNewPlayer(conn)
+	})
 
-	// 游戏主循环
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
+	// 提供静态文件服务
+	fs := http.FileServer(http.Dir("static"))
+	http.Handle("/", fs)
 
-	for {
-		select {
-		case ev := <-eventQueue:
-			if ev.Type == termbox.EventKey {
-				switch ev.Key {
-				case termbox.KeyArrowUp:
-					g.ChangeDirection(game.Up)
-				case termbox.KeyArrowDown:
-					g.ChangeDirection(game.Down)
-				case termbox.KeyArrowLeft:
-					g.ChangeDirection(game.Left)
-				case termbox.KeyArrowRight:
-					g.ChangeDirection(game.Right)
-				case termbox.KeyEsc:
-					return
-				}
-			}
-		case <-ticker.C:
-			// 清屏
-			termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-
-			// 移动蛇
-			g.Move()
-
-			// 绘制游戏状态
-			gameState := g.String()
-			lines := strings.Split(gameState, "\n")
-			for y, line := range lines {
-				for x, ch := range line {
-					termbox.SetCell(x, y, ch, termbox.ColorDefault, termbox.ColorDefault)
-				}
-			}
-
-			// 刷新屏幕
-			termbox.Flush()
-
-			// 检查游戏是否结束
-			if g.GameOver {
-				time.Sleep(2 * time.Second)
-				return
-			}
-		}
-	}
+	// 启动HTTP服务器
+	log.Printf("服务器启动在 %s\n", *addr)
+	log.Fatal(http.ListenAndServe(*addr, nil))
 }

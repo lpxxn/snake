@@ -34,6 +34,7 @@ type Game struct {
 	Height    int
 	Snake     *Snake
 	Food      Point
+	Foods     []Point
 	Score     int
 	GameOver  bool
 }
@@ -80,8 +81,18 @@ func (g *Game) generateFood() {
 			}
 		}
 		
+		// 确保食物不会生成在其他食物上
+		for _, food := range g.Foods {
+			if food.X == x && food.Y == y {
+				valid = false
+				break
+			}
+		}
+		
 		if valid {
-			g.Food = Point{X: x, Y: y}
+			newFood := Point{X: x, Y: y}
+			g.Foods = append(g.Foods, newFood)
+			g.Food = newFood // 保持向后兼容
 			break
 		}
 	}
