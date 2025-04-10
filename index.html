@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>多人贪吃蛇游戏</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #game-container {
+      display: flex;
+      gap: 20px;
+    }
+
+    #game-board {
+      border: 2px solid #333;
+      background-color: #f0f0f0;
+    }
+
+    #players-list {
+      width: 200px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background-color: #f9f9f9;
+    }
+
+    .player-item {
+      margin: 5px 0;
+      padding: 5px;
+      background-color: #e0e0e0;
+      border-radius: 3px;
+    }
+
+    #controls {
+      margin-top: 20px;
+    }
+
+    button {
+      padding: 8px 15px;
+      margin: 0 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>多人贪吃蛇游戏</h1>
+  <div id="game-container">
+    <canvas id="game-board" width="800" height="600"></canvas>
+    <div id="players-list">
+      <h3>玩家列表</h3>
+      <div id="players"></div>
+    </div>
+  </div>
+  <div id="controls">
+    <button id="start-btn">开始游戏</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game-board')
+    const ctx = canvas.getContext('2d')
+    const playersList = document.getElementById('players')
+    const startBtn = document.getElementById('start-btn')
+
+    let ws
+    let playerId
+
+    startBtn.addEventListener('click', () => {
+      ws = new WebSocket('ws://localhost:8080/ws')
+
+      ws.onopen = () => {
+        console.log('Connected to server')
+      }
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        if (data.type === 'init') {
+          playerId = data.playerId
+          updatePlayersList(data.players)
+        } else if (data.type === 'update') {
+          renderGame(data)
+          updatePlayersList(data.players)
+        }
+      }
+
+      ws.onclose = () => {
+        console.log('Disconnected from server')
+      }
+    })
+
+    function updatePlayersList (players) {
+      playersList.innerHTML = ''
+      players.forEach(player => {
+        const playerEl = document.createElement('div')
+        playerEl.className = 'player-item'
+        playerEl.textContent = player.name
+        playersList.appendChild(playerEl)
+      })
+    }
+
+    function renderGame (gameState) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+      // 绘制食物
+      gameState.foods.forEach(food => {
+        ctx.fillStyle = 'red'
+        ctx.fillRect(food.position.x * 10, food.position.y * 10, 10, 10)
+      })
+
+      // 绘制蛇
+      Object.values(gameState.players).forEach(snake => {
+        ctx.fillStyle = snake.id === playerId ? 'green' : 'blue'
+        snake.body.forEach(segment => {
+          ctx.fillRect(segment.x * 10, segment.y * 10, 10, 10)
+        })
+      })
+    }
+
+    // 键盘控制
+    document.addEventListener('keydown', (e) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return
+
+      let direction
+      switch (e.key) {
+        case 'ArrowUp': direction = 'up'; break
+        case 'ArrowDown': direction = 'down'; break
+        case 'ArrowLeft': direction = 'left'; break
+        case 'ArrowRight': direction = 'right'; break
+        default: return
+      }
+
+      ws.send(JSON.stringify({
+        type: 'direction',
+        direction: direction
+      }))
+    });
+  </script>
+</body>
+
+</html>
